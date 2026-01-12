@@ -472,3 +472,67 @@ ggvolc(all_genes, attention_genes, add_seg = TRUE) +
   labs(title = "Highlighted Genes of Interest",
        subtitle = "Using ggvolc with attention_genes") +
   theme_minimal(base_size = 14)
+
+# Exercise 1 - Your first volcano plot ----
+
+# Create data
+set.seed(789)
+my_deg <- data.frame(
+  gene = paste0("Gene_", 1:1000),
+  log2FC = rnorm(1000, mean = 0, sd = 2),
+  pvalue = rbeta(1000, 0.1, 1)
+) |>
+  mutate(
+    padj = p.adjust(pvalue, method = "BH"),
+    log10p = -log10(padj),
+    status = case_when(
+      log2FC > 1.5 & padj < 0.01 ~ "Upregulated",
+      log2FC < -1.5 & padj < 0.01 ~ "Downregulated",
+      TRUE ~ "Not significant"
+    )
+  )
+
+# Create plot
+ggplot(my_deg, aes(x = log2FC, y = log10p, color = status)) +
+  geom_point(alpha = 0.6, size = 2) +
+  scale_color_manual(values = c("Upregulated" = "#d1422f",
+                                "Downregulated" = "#1a5b5b",
+                                "Not significant" = "gray70")) +
+  geom_hline(yintercept = -log10(0.01), linetype = "dashed") +
+  geom_vline(xintercept = c(-1.5, 1.5), linetype = "dashed") +
+  labs(title = "My First Volcano Plot",
+       x = "log2 Fold Change", y = "-log10(Adjusted P-value)")
+
+# Count genes
+table(my_deg$status)
+
+# Exercise 2 - Multi-level classification ----
+
+# Multi-level classification
+my_deg <- my_deg |>
+  mutate(
+    detailed = case_when(
+      log2FC > 2 & padj < 0.001 ~ "Highly up",
+      log2FC > 1 & padj < 0.05 ~ "Moderately up",
+      log2FC < -2 & padj < 0.001 ~ "Highly down",
+      log2FC < -1 & padj < 0.05 ~ "Moderately down",
+      TRUE ~ "Not significant"
+    )
+  )
+
+# Custom colors
+my_colors <- c("Highly up" = "#d73027",
+               "Moderately up" = "#fc8d59",
+               "Not significant" = "#cccccc",
+               "Moderately down" = "#91bfdb",
+               "Highly down" = "#4575b4")
+
+# Plot
+ggplot(my_deg, aes(x = log2FC, y = log10p, color = detailed)) +
+  geom_point(alpha = 0.6, size = 2) +
+  scale_color_manual(values = my_colors) +
+  geom_hline(yintercept = c(-log10(0.05), -log10(0.001)),
+             linetype = "dashed", alpha = 0.5) +
+  geom_vline(xintercept = c(-2, -1, 1, 2), linetype = "dashed", alpha = 0.5) +
+  labs(title = "Multi-Level Classification",
+       x = "log2 Fold Change", y = "-log10(Adjusted P-value)")
