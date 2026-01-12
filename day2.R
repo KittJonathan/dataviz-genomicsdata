@@ -452,3 +452,23 @@ head(all_genes, 3)
 
 data(attention_genes)
 head(attention_genes, 3)
+
+# Basic plot without segments
+ggvolc(all_genes,
+       add_seg = FALSE)
+
+# Add significance segments
+ggvolc(all_genes,
+       add_seg = TRUE) +
+  labs(title = "ggvolc with Significance Segments")
+
+# Highlight specific genes
+ggvolc(all_genes,
+       attention_genes,  # Genes to highlight
+       add_seg = TRUE)
+
+# Customize with ggplot2 layers
+ggvolc(all_genes, attention_genes, add_seg = TRUE) +
+  labs(title = "Highlighted Genes of Interest",
+       subtitle = "Using ggvolc with attention_genes") +
+  theme_minimal(base_size = 14)
