@@ -9,6 +9,8 @@ library(Rtsne)
 library(ggrepel)
 library(EnhancedVolcano)
 library(ggvolc)
+library(karyoploteR)
+library(GenomicRanges)
 
 # Set up ----
 
@@ -536,3 +538,165 @@ ggplot(my_deg, aes(x = log2FC, y = log10p, color = detailed)) +
   geom_vline(xintercept = c(-2, -1, 1, 2), linetype = "dashed", alpha = 0.5) +
   labs(title = "Multi-Level Classification",
        x = "log2 Fold Change", y = "-log10(Adjusted P-value)")
+
+# Exercise 3 - Faceted comparisons ----
+
+# Create 3 treatment comparisons
+set.seed(999)
+create_comp <- function(name) {
+  data.frame(
+    gene = paste0("Gene_", 1:1000),
+    log2FC = rnorm(1000, 0, 2),
+    pvalue = rbeta(1000, 0.1, 1),
+    comparison = name
+  ) |>
+    mutate(padj = p.adjust(pvalue, "BH"),
+           log10p = -log10(padj),
+           sig = ifelse(abs(log2FC) > 1 & padj < 0.05, "Sig", "NS"))
+}
+
+comp_data <- bind_rows(
+  create_comp("Treatment A"),
+  create_comp("Treatment B"),
+  create_comp("Treatment C")
+)
+
+# Faceted plot
+ggplot(comp_data, aes(x = log2FC, y = log10p, color = sig)) +
+  geom_point(alpha = 0.5, size = 1.5) +
+  scale_color_manual(values = c("Sig" = "#d1422f", "NS" = "gray80")) +
+  facet_wrap(~comparison, ncol = 3) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  geom_vline(xintercept = c(-1, 1), linetype = "dashed") +
+  labs(title = "Multiple Treatment Comparisons",
+       x = "log2 Fold Change", y = "-log10(Adjusted P-value)") +
+  theme_minimal()
+
+# Peak visualisation ----
+
+# Simulate genomic signal data
+set.seed(123)
+genomic_pos <- 1:1000
+signal <- abs(rnorm(1000, mean = 2, sd = 3))
+signal[450:550] <- signal[450:550] + rnorm(101, mean = 10, sd = 2)
+
+# Create data frame
+track_data <- data.frame(
+  position = genomic_pos,
+  signal = signal
+)
+head(track_data)
+
+# Plot peak track
+ggplot(track_data, aes(x = position, y = signal)) +
+  geom_area(fill = "steelblue", alpha = 0.6) +
+  geom_line(color = "darkblue", linewidth = 0.5) +
+  annotate("rect", xmin = 450, xmax = 550, ymin = 0, ymax = Inf,
+           fill = "#d1422f", alpha = 0.1) +
+  annotate("text", x = 500, y = 18, label = "Peak", color = "#d1422f", size = 5) +
+  labs(title = "Example Peak Track",
+       x = "Genomic Position (kb)", y = "Signal Intensity")+
+  custom_theme()
+
+# Method 1 - karyoploteR ----
+
+custom.genome <- data.frame(
+  chr = "chr1",
+  start = 1,
+  end = 4600000
+)
+
+plotKaryotype(genome = custom.genome)
+
+# karyoploteR: Basic Karyoplot
+
+# Create example peak data
+set.seed(123)
+peaks <- GRanges(
+  seqnames = paste0("chr", sample(1:22, 100, replace = TRUE)),
+  ranges = IRanges(start = sample(1:200000000, 100),
+                   width = sample(200:2000, 100)),
+  score = runif(100, 0, 10)
+)
+
+# Create karyoplot and add peaks
+kp <- plotKaryotype(genome = "hg38", chromosomes = paste0("chr", 1:22))
+kpPlotRegions(kp, data = peaks, col = "steelblue")
+
+# karyoploteR: multi-track
+
+# Create karyoplot
+kp <- plotKaryotype(genome = "hg38", chromosomes = paste0("chr", 1:5))
+
+# Track 1: Sample A peaks (top)
+kpPlotRegions(kp, data = peaks,
+              r0 = 0, r1 = 0.3,
+              col = "#d1422f")
+
+# Track 2: Sample B peaks (middle)
+kpPlotRegions(kp, data = peaks,
+              r0 = 0.35, r1 = 0.65,
+              col = "#1a5b5b")
+
+# Track 3: Density (bottom)
+kpPlotDensity(kp, data = peaks,
+              r0 = 0.7, r1 = 1,
+              col = "#f4ab5c")
+
+# r0/r1: vertical position (0=bottom, 1=top)
+
+# karyoploteR: density plot
+
+set.seed(456)
+peaks_chr1 <- GRanges(
+  seqnames = "chr1",
+  ranges = IRanges(
+    start = sample(1:200000000, 200),
+    width = sample(200:2000, 200)
+  )
+)
+
+# Create karyoplot
+kp <- plotKaryotype(genome = "hg38", chromosomes = "chr1")
+
+# Add peak density with window
+kpPlotDensity(kp,
+              data = peaks,
+              window.size = 1e7,  # 10Mb windows
+              col = "steelblue")
+
+# karyoploteR: coverage plot
+
+# Create coverage data
+set.seed(789)
+coverage <- GRanges(
+  seqnames = "chr1",
+  ranges = IRanges(start = seq(1e6, 5e6, by = 1000),
+                   width = 1000),
+  score = abs(rnorm(4001, mean = 50, sd = 20))
+)
+
+# Plot coverage
+kp <- plotKaryotype(genome = "hg38", chromosomes = "chr1")
+kpPlotCoverage(kp,
+               data = coverage,
+               col = "forestgreen",
+               r0 = 0, r1 = 0.5)
+
+# karyoploteR: chromosome zoom
+
+# Focus on specific region
+kp <- plotKaryotype(
+  genome = "hg38",
+  chromosomes = "chr1",
+  plot.type = 4
+)
+
+# Add multiple data types
+kpPlotRegions(kp, data = peaks, col = "#d1422f", r0 = 0, r1 = 0.45)
+kpPlotDensity(kp, data = peaks, col = "#1a5b5b", r0 = 0.55, r1 = 1)
+
+# Add horizontal line at specific position
+kpAbline(kp, h = 0.5, col = "gray", lty = 2)
+
+# Method 2: Gviz ----
