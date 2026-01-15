@@ -11,6 +11,17 @@ library(EnhancedVolcano)
 library(ggvolc)
 library(karyoploteR)
 library(GenomicRanges)
+library(Gviz)
+library(pheatmap)
+library(ComplexHeatmap)
+library(circlize)
+library(VennDiagram)
+library(UpSetR)
+library(RColorBrewer)
+library(ggtree)
+library(ape)
+library(ggtreeExtra)
+library(plotly)
 
 # Set up ----
 
@@ -700,3 +711,544 @@ kpPlotDensity(kp, data = peaks, col = "#1a5b5b", r0 = 0.55, r1 = 1)
 kpAbline(kp, h = 0.5, col = "gray", lty = 2)
 
 # Method 2: Gviz ----
+
+# Basic tracks
+
+# Create example ChIP-seq peaks
+chipseq_peaks <- GRanges(
+  seqnames = "chr1",
+  ranges = IRanges(start = c(1000000, 1005000, 1010000),
+                   end = c(1002000, 1007000, 1012000)),
+  score = c(25, 45, 35)
+)
+
+# Create tracks
+genome_axis <- GenomeAxisTrack()
+ideogram <- IdeogramTrack(genome = "hg38", chromosome = "chr1")
+peaks_track <- AnnotationTrack(
+  chipseq_peaks, name = "Peaks", fill = "steelblue"
+)
+
+# Plot
+plotTracks(
+  list(ideogram, genome_axis, peaks_track),
+  from = 1000000,
+  to = 1015000,
+  chromosome = "chr1"
+)
+
+# Data tracks
+
+# Create coverage data for sample
+set.seed(123)
+coverage_data <- GRanges(
+  seqnames = "chr1",
+  ranges = IRanges(start = seq(1e6, 1.5e6, by = 100),
+                   width = 100),
+  score = abs(rnorm(5001, mean = 50, sd = 20))
+)
+
+# Create DataTrack
+coverage_track <- DataTrack(
+  coverage_data,
+  name = "ChIP Signal",
+  type = "histogram",
+  fill = "darkgreen",
+  col = "darkgreen"
+)
+
+# Plot with axis
+plotTracks(
+  list(ideogram, genome_axis, coverage_track),
+  from = 1e6,
+  to = 1.5e6,
+  chromosome = "chr1"
+)
+
+# Multi-sample comparison
+
+# Sample 1: Control
+sample1_track <- DataTrack(
+  coverage_data,
+  name = "Control",
+  type = "histogram",
+  fill = "gray60"
+)
+
+# Sample 2: Treatment (higher signal)
+sample2_track <- DataTrack(
+  coverage_data,
+  name = "Treatment",
+  type = "histogram",
+  fill = "firebrick"
+)
+
+# Plot both samples
+plotTracks(
+  list(ideogram, genome_axis,
+       sample1_track,
+       sample2_track),
+  from = 1e6,
+  to = 1.5e6,
+  chromosome = "chr1"
+)
+
+# Different plot types
+
+# Type: polygon (filled area)
+track1 <- DataTrack(coverage_data, name = "Polygon",
+                    type = "polygon", fill = "lightblue")
+
+# Type: line
+track2 <- DataTrack(coverage_data, name = "Line",
+                    type = "l", col = "darkblue", lwd = 2)
+
+# Type: points
+track3 <- DataTrack(coverage_data, name = "Points",
+                    type = "p", col = "#d1422f")
+
+# Type: smooth (smoothed line)
+track4 <- DataTrack(coverage_data, name = "Smooth",
+                    type = "smooth", col = "purple")
+
+# Plot all
+plotTracks(list(ideogram, genome_axis, track1, track2, track3, track4),
+           from = 1e6, to = 1.5e6, chromosome = "chr1")
+
+# Overlay tracks
+
+# Create overlapping data
+set.seed(999)
+data1 <- GRanges("chr1", IRanges(seq(1e6, 1.5e6, 100), width = 100),
+                 score = abs(rnorm(5001, 50, 20)))
+data2 <- GRanges("chr1", IRanges(seq(1e6, 1.5e6, 100), width = 100),
+                 score = abs(rnorm(5001, 40, 15)))
+
+# Create overlay track
+overlay_track <- OverlayTrack(
+  trackList = list(
+    DataTrack(data1, type = "l", col = "#d1422f", name = "Sample1"),
+    DataTrack(data2, type = "l", col = "#1a5b5b", name = "Sample2")
+  )
+)
+
+# Plot
+plotTracks(
+  list(ideogram, genome_axis, overlay_track),
+  from = 1e6,
+  to = 1.5e6,
+  chromosome = "chr1"
+)
+
+# Advanced visualizations ----
+
+# Basic heatmap
+
+# Simulate gene expression matrix
+set.seed(123)
+n_genes <- 50
+n_samples <- 10
+
+expr_matrix <- matrix(
+  rnorm(n_genes * n_samples, mean = 50, sd = 20),
+  nrow = n_genes,
+  dimnames = list(paste0("Gene_", 1:n_genes),
+                  paste0("Sample_", 1:n_samples))
+)
+
+# Add tissue-specific patterns
+expr_matrix[1:20, 1:5] <- expr_matrix[1:20, 1:5] + 40  # Brain
+expr_matrix[21:40, 6:10] <- expr_matrix[21:40, 6:10] + 40  # Liver
+
+# Create heatmap
+pheatmap(expr_matrix,
+         scale = "row",
+         clustering_distance_rows = "euclidean",
+         clustering_distance_cols = "euclidean",
+         main = "Gene Expression Heatmap")
+
+# Annotated heatmap
+
+# Create sample annotations
+sample_anno <- data.frame(
+  Tissue = rep(c("Brain", "Liver"), each = 5),
+  Treatment = rep(c("Control", "Treated"), times = 5),
+  row.names = colnames(expr_matrix)
+)
+
+# Define annotation colors
+anno_colors <- list(
+  Tissue = c(Brain = "#E64B35", Liver = "#4DBBD5"),
+  Treatment = c(Control = "gray70", Treated = "gold")
+)
+
+# Create annotated heatmap
+pheatmap(expr_matrix,
+         scale = "row",
+         annotation_col = sample_anno,
+         annotation_colors = anno_colors,
+         show_rownames = FALSE,
+         main = "Annotated Gene Expression")
+
+# ComplexHeatmap
+
+# Create color function
+col_fun <- colorRamp2(
+  c(-2, 0, 2),
+  c("#1a5b5b", "white", "#d1422f")
+)
+
+# Create complex heatmap
+Heatmap(scale(expr_matrix),
+        name = "Z-score",
+        col = col_fun,
+        top_annotation = HeatmapAnnotation(
+          Tissue = sample_anno$Tissue,
+          col = list(Tissue = c(Brain = "#E64B35", Liver = "#4DBBD5"))
+        ),
+        show_row_names = FALSE,
+        column_title = "Complex Heatmap with Annotations")
+
+# Venn diagrams
+
+# Simulate differentially expressed genes
+set.seed(456)
+
+# Create gene universe
+all_genes <- paste0("Gene_", 1:1000)
+
+# Treatment A DEGs (200 genes)
+treatment_A <- sample(all_genes, 200)
+
+# Treatment B DEGs (250 genes, 100 overlap with A)
+treatment_B <- c(
+  sample(treatment_A, 100),  # 100 overlap
+  sample(setdiff(all_genes, treatment_A), 150)  # 150 unique
+)
+
+# Treatment C DEGs (180 genes)
+treatment_C <- sample(all_genes, 180)
+
+# Create list
+gene_lists <- list(
+  Treatment_A = treatment_A,
+  Treatment_B = treatment_B,
+  Treatment_C = treatment_C
+)
+
+# Create Venn diagram
+venn.plot <- venn.diagram(
+  x = gene_lists,
+  category.names = c("Treatment A", "Treatment B", "Treatment C"),
+  filename = NULL,
+  fill = c("#E64B35", "#4DBBD5", "#00A087"),
+  alpha = 0.5,
+  cex = 1.5,
+  cat.cex = 1.2
+)
+
+# Display
+grid.draw(venn.plot)
+
+# UpSet plots
+
+# Simulate 5 different conditions
+set.seed(789)
+all_genes <- paste0("Gene_", 1:1000)
+
+gene_sets <- list(
+  Brain = sample(all_genes, 250),
+  Liver = sample(all_genes, 200),
+  Heart = sample(all_genes, 180),
+  Kidney = sample(all_genes, 220),
+  Lung = sample(all_genes, 190)
+)
+
+# Create UpSet plot
+upset(fromList(gene_sets),
+      nsets = 5,
+      order.by = "freq")
+
+# UpSet with queries
+
+# Highlight specific intersections
+upset(fromList(gene_sets),
+      nsets = 5,
+      order.by = "freq",
+      queries = list(
+        list(query = intersects,
+             params = list("Brain", "Liver"),
+             color = "#d1422f", active = TRUE)
+      ))
+
+# Show only specific intersections
+upset(fromList(gene_sets),
+      nsets = 5,
+      nintersects = 20,  # Show top 20 intersections
+      mb.ratio = c(0.6, 0.4),  # Adjust matrix/bar ratio
+      order.by = "freq",
+      text.scale = c(1.5, 1.5, 1.3, 1.3, 1.5, 1.2),
+      point.size = 3.5,
+      line.size = 1)
+
+# Exercise 1: custom heatmap
+
+# Create cell type-specific expression
+set.seed(111)
+n_genes <- 100
+n_cells <- 30
+
+expr_data <- matrix(
+  rnorm(n_genes * n_cells, mean = 5, sd = 2),
+  nrow = n_genes,
+  dimnames = list(paste0("Gene_", 1:n_genes),
+                  paste0("Cell_", 1:n_cells))
+)
+
+# Add cell type patterns
+expr_data[1:30, 1:10] <- expr_data[1:30, 1:10] + 5   # T cells
+expr_data[31:60, 11:20] <- expr_data[31:60, 11:20] + 5  # B cells
+expr_data[61:100, 21:30] <- expr_data[61:100, 21:30] + 5  # Monocytes
+
+# Create annotations
+cell_anno <- data.frame(
+  CellType = c(rep("T cell", 10), rep("B cell", 10), rep("Monocyte", 10)),
+  Donor = rep(paste0("Donor", 1:3), length.out = 30),
+  row.names = colnames(expr_data)
+)
+
+# Plot
+library(pheatmap)
+pheatmap(expr_data, scale = "row",
+         annotation_col = cell_anno,
+         show_rownames = FALSE,
+         main = "Single-Cell Expression Patterns")
+
+# Exercise 2: correlation heatmap
+
+# Calculate sample correlations
+cor_matrix <- cor(expr_matrix)
+
+# Custom colors for correlation
+cor_colors <- colorRampPalette(rev(brewer.pal(9, "RdBu")))(100)
+
+pheatmap(cor_matrix,
+         color = cor_colors,
+         breaks = seq(-1, 1, length.out = 101),
+         display_numbers = TRUE,
+         number_format = "%.2f",
+         fontsize_number = 10,
+         main = "Sample Correlation Heatmap")
+
+# Exercise 3: pathway overlap
+
+# Simulate pathway analysis results
+set.seed(222)
+all_genes <- paste0("Gene_", 1:500)
+
+pathways <- list(
+  "Cell Cycle" = sample(all_genes, 80),
+  "Apoptosis" = sample(all_genes, 70),
+  "Immune Response" = sample(all_genes, 90),
+  "Metabolism" = sample(all_genes, 100)
+)
+
+# Create Venn for 2 pathways
+venn.diagram(
+  x = list(CellCycle = pathways[[1]],
+           Apoptosis = pathways[[2]]),
+  filename = NULL,
+  fill = c("lightblue", "pink"),
+  alpha = 0.5
+)
+
+# For all 4 pathways, use UpSet
+upset(fromList(pathways),
+      order.by = "freq",
+      text.scale = 1.5)
+
+# Exercise 4: Multi-condition comparison
+
+# Simulate DEGs from multiple comparisons
+set.seed(333)
+all_genes <- paste0("Gene_", 1:800)
+
+deg_sets <- list(
+  "Condition1_vs_Control" = sample(all_genes, 150),
+  "Condition2_vs_Control" = sample(all_genes, 180),
+  "Condition3_vs_Control" = sample(all_genes, 160),
+  "Condition4_vs_Control" = sample(all_genes, 140),
+  "Condition5_vs_Control" = sample(all_genes, 170)
+)
+
+# Create comprehensive UpSet plot
+upset(fromList(deg_sets),
+      nsets = 5,
+      nintersects = 30,
+      order.by = "freq",
+      mb.ratio = c(0.6, 0.4),
+      text.scale = 1.3,
+      point.size = 3,
+      main.bar.color = "steelblue")
+
+# Phylogenetic trees ----
+
+# Load or create a tree
+nwk <- system.file("extdata", "sample.nwk", package="treeio")
+tree <- read.tree(nwk)
+
+# Basic plot
+ggtree(tree) +
+  geom_tiplab(size = 3) +
+  theme_tree2()
+
+# Flipper horizontal
+ggtree(tree) +
+  coord_flip() +
+  geom_tiplab(size = 3)
+
+# Reversed direction
+ggtree(tree) +
+  coord_flip() +
+  scale_x_reverse() +
+  geom_tiplab(size = 3)
+
+# Circular layout
+set.seed(456)
+circ_tree <- rtree(20)
+
+cross_colors <- met.brewer("Cross", 5)
+
+ggtree(circ_tree, layout = "circular") +
+  geom_tiplab(size = 2.5, offset = 0.5) +
+  labs(title = "Circular Tree")
+
+# Unrooted layout
+ggtree(circ_tree, layout = "unrooted") +
+  geom_tiplab(size = 2.5) +
+  labs(title = "Unrooted Tree")
+
+# Highlighting clades
+
+# Highlight a clade
+ggtree(tree, layout = "circular") +
+  geom_hilight(node = 23, fill = cross_colors[1], alpha = 0.6) +
+  geom_tiplab(size = 3)
+
+# Highlight multiple clades
+ggtree(tree, layout = "circular") +
+  geom_hilight(node = 5, fill = cross_colors[1], alpha = 0.5, extend = 0.2) +
+  geom_hilight(node = 13, fill = cross_colors[3], alpha = 0.5, extend = 0.2) +
+  geom_tiplab(size = 3)
+
+set.seed(789)
+large_tree <- rtree(50)
+
+cross_colors <- met.brewer("Cross", 5)
+
+# Find some internal nodes for highlighting
+p <- ggtree(large_tree, layout = "circular")
+
+# Highlight different clades
+p +
+  geom_hilight(node = 55, fill = cross_colors[1], alpha = 0.4, extend = 0.15) +
+  geom_hilight(node = 70, fill = cross_colors[3], alpha = 0.4, extend = 0.15) +
+  geom_hilight(node = 85, fill = cross_colors[5], alpha = 0.4, extend = 0.15) +
+  geom_tiplab(size = 2, align = FALSE) +
+  labs(title = "Phylogenetic Tree with Highlighted Clades",
+       subtitle = "Different colors represent distinct evolutionary groups")
+
+# Adding strips and annotations
+
+ggtree(tree, layout = "circular") +
+  geom_strip(
+    taxa1 = "A",
+    taxa2 = "m",
+    color = cross_colors[1],
+    barsize = 3,
+    offset = 0.05
+  ) +
+  geom_tiplab(size = 3)
+
+# Fancy tree: multiple annotations
+
+set.seed(101)
+fancy_tree <- rtree(40)
+
+# Create some example data for the tips
+tip_data <- data.frame(
+  taxa = fancy_tree$tip.label,
+  group = sample(c("Group A", "Group B", "Group C", "Group D"),
+                 40, replace = TRUE),
+  value1 = rnorm(40, mean = 50, sd = 15),
+  value2 = runif(40, 0, 100)
+)
+
+cross_colors <- met.brewer("Cross", 5)
+
+p <- ggtree(fancy_tree, layout = "circular", size = 0.8)
+
+# Add highlighted clades
+p2 <- p +
+  geom_hilight(node = 45, fill = cross_colors[1], alpha = 0.3, extend = 0.1) +
+  geom_hilight(node = 60, fill = cross_colors[2], alpha = 0.3, extend = 0.1) +
+  geom_hilight(node = 75, fill = cross_colors[4], alpha = 0.3, extend = 0.1)
+
+# Add tip labels
+p3 <- p2 +
+  geom_tiplab(size = 2, align = TRUE, linesize = 0.3, offset = 0.5) +
+  geom_tippoint(aes(color = tip_data$group[match(label, tip_data$taxa)]),
+                size = 2, alpha = 0.8) +
+  scale_color_manual(values = cross_colors[1:4], name = "Group")
+
+# Add title
+p3 +
+  labs(title = "Annotated Phylogenetic Tree",
+       subtitle = "With highlighted clades and tip metadata") +
+  theme(legend.position = "right",
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 12, hjust = 0.5))
+
+# Adding external data with ggtreeExtra
+
+set.seed(202)
+heat_tree <- rtree(25)
+
+# Create heatmap data
+heat_data <- expand.grid(
+  taxa = heat_tree$tip.label,
+  trait = paste0("Trait", 1:5)
+)
+heat_data$value <- rnorm(nrow(heat_data), mean = 50, sd = 20)
+
+cross_colors <- met.brewer("Cross", 5)
+
+ggtree(heat_tree, layout = "circular") +
+  geom_tiplab(size = 2.5, offset = 1.5) +
+  geom_fruit(
+    data = heat_data,
+    geom = geom_tile,
+    mapping = aes(y = taxa, x = trait, fill = value),
+    offset = 0.1,
+    pwidth = 0.25,
+    color = "white",
+    size = 0.5
+  ) +
+  scale_fill_gradientn(
+    colors = c(cross_colors[1], "white", cross_colors[3]),
+    name = "Value"
+  ) +
+  labs(title = "Phylogenetic Tree with Trait Heatmap",
+       subtitle = "Integrating evolutionary relationships with trait data") +
+  theme(legend.position = "right",
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 12, hjust = 0.5))
+
+# Interactive trees with ggtree
+
+# Create tree
+p <- ggtree(tree) + geom_tiplab(size = 3)
+p
+
+# Convert to interactive
+plotly(p)
